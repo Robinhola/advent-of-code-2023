@@ -35,9 +35,7 @@ let%expect_test _ =
 let parse_card (card_part : string) =
   match String.split ~on:' ' card_part |> List.filter ~f:(Fn.non String.is_empty) with
   | [ "Card"; id ] -> Int.of_string id
-  | rest ->
-    print_s [%message (rest : string list)];
-    failwith ("Invalid card: " ^ card_part)
+  | rest -> raise_s [%message "Invalid line" (card_part : string) (rest : string list)]
 ;;
 
 let%expect_test _ =
@@ -50,7 +48,7 @@ let parse_line line =
   | [ card_part; number_part ] ->
     let winning_numbers, card_numbers = parse_numbers number_part in
     { card = parse_card card_part; card_numbers; winning_numbers }
-  | _ -> failwith "Invalid line"
+  | _ -> raise_s [%message "Invalid line" (line : string)]
 ;;
 
 let parse (data : string) : t list = String.split_lines data |> List.map ~f:parse_line
@@ -82,21 +80,51 @@ let part1 (data : string) =
   |> List.sum (module Int) ~f:(fun length -> Int.pow 2 (length - 1))
 ;;
 
-let%expect_test _ =
-  print_s [%message (part1 example : int)];
-  print_s [%message (part1 Advent_2023_03_input.data : int)];
-  [%expect {|
-    ("part1 example" 13)
-    ("part1 Advent_2023_03_input.data" 22488) |}]
+let part2' (data : string) =
+  let winning_alist =
+    parse data
+    |> List.map ~f:(fun { card; card_numbers; winning_numbers } ->
+      let length = Set.inter winning_numbers card_numbers |> Set.length in
+      card, length)
+  in
+  let multipliers =
+    let init =
+      List.map winning_alist ~f:(fun (key, _) -> key, 1) |> Int.Map.of_alist_exn
+    in
+    winning_alist
+    |> List.fold ~init ~f:(fun acc (key, value) ->
+      let range = List.range 1 (value + 1) in
+      List.fold range ~init:acc ~f:(fun acc index ->
+        let multi = Map.find_exn acc key in
+        let key = key + index in
+        match Map.find acc key with
+        | Some current -> Map.set acc ~key ~data:(current + multi)
+        | None -> Map.set acc ~key ~data:2))
+  in
+  multipliers
 ;;
 
-let solve =
-  Command.basic
-    ~summary:"Solve 2023-12-03"
-    (let%map_open.Command () = return () in
-     fun () ->
-       let part1 = part1 Advent_2023_03_input.data in
-       Ascii_table.simple_list_table
-         [ "part"; "solution" ]
-         [ [ "1"; Int.to_string part1 ] ])
+let part2 data = part2' data |> Map.data |> List.sum (module Int) ~f:Fn.id
+
+let%expect_test _ =
+  print_endline [%string "part   | solution"];
+  print_endline [%string "1      | %{part1 example#Int}"];
+  print_endline [%string "1 real | %{part1 Input.data#Int}"];
+  print_endline [%string "2      | %{part2 example#Int}"];
+  print_endline [%string "2 real | %{part2 Input.data#Int}"];
+  print_s [%message (part2' example : int Int.Map.t)];
+  [%expect
+    {|
+    part   | solution
+    1      | 13
+    1 real | 22488
+    2      | 30
+    2 real | 7013204
+    ("part2' example" ((1 1) (2 2) (3 4) (4 8) (5 14) (6 1))) |}]
+;;
+
+let solve () =
+  print_endline [%string "part | solution"];
+  print_endline [%string "1    | %{part1 Input.data#Int}"];
+  print_endline [%string "2    | %{part2 Input.data#Int}"]
 ;;
