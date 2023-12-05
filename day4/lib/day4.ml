@@ -80,47 +80,54 @@ let part1 (data : string) =
   |> List.sum (module Int) ~f:(fun length -> Int.pow 2 (length - 1))
 ;;
 
-let part2' (data : string) =
-  let winning_alist =
-    parse data
+let add_numbers_of_copied_cards ~winning_card number_of_cards copied_card =
+  let key = winning_card + copied_card in
+  let data =
+    let multiplier_so_far = Map.find_exn number_of_cards key in
+    let from_this_card = Map.find_exn number_of_cards winning_card in
+    multiplier_so_far + from_this_card
+  in
+  Map.set number_of_cards ~key ~data
+;;
+
+let part2 (data : string) =
+  let parsed_ts : t list = parse data in
+  let cards_to_numbers_of_wins =
+    parsed_ts
     |> List.map ~f:(fun { card; card_numbers; winning_numbers } ->
       let length = Set.inter winning_numbers card_numbers |> Set.length in
       card, length)
   in
-  let multipliers =
-    let init =
-      List.map winning_alist ~f:(fun (key, _) -> key, 1) |> Int.Map.of_alist_exn
-    in
-    winning_alist
-    |> List.fold ~init ~f:(fun acc (key, value) ->
-      let range = List.range 1 (value + 1) in
-      List.fold range ~init:acc ~f:(fun acc index ->
-        let multi = Map.find_exn acc key in
-        let key = key + index in
-        match Map.find acc key with
-        | Some current -> Map.set acc ~key ~data:(current + multi)
-        | None -> Map.set acc ~key ~data:2))
-  in
-  multipliers
+  cards_to_numbers_of_wins
+  |> List.fold
+       ~init:(List.map parsed_ts ~f:(fun { card; _ } -> card, 1) |> Int.Map.of_alist_exn)
+       ~f:(fun init (winning_card, value) ->
+         List.fold
+           (List.range 1 (value + 1))
+           ~init
+           ~f:(add_numbers_of_copied_cards ~winning_card))
+  |> Map.data
+  |> List.sum (module Int) ~f:Fn.id
 ;;
 
-let part2 data = part2' data |> Map.data |> List.sum (module Int) ~f:Fn.id
-
 let%expect_test _ =
-  print_endline [%string "part   | solution"];
-  print_endline [%string "1      | %{part1 example#Int}"];
-  print_endline [%string "1 real | %{part1 Input.data#Int}"];
-  print_endline [%string "2      | %{part2 example#Int}"];
-  print_endline [%string "2 real | %{part2 Input.data#Int}"];
-  print_s [%message (part2' example : int Int.Map.t)];
+  print_endline [%string "part | example"];
+  print_endline [%string "1    | %{part1 example#Int}"];
+  print_endline [%string "2    | %{part2 example#Int}"];
+  print_endline [%string "---------------"];
+  print_endline [%string "part | solution"];
+  print_endline [%string "1    | %{part1 Input.data#Int}"];
+  print_endline [%string "2    | %{part2 Input.data#Int}"];
   [%expect
     {|
-    part   | solution
-    1      | 13
-    1 real | 22488
-    2      | 30
-    2 real | 7013204
-    ("part2' example" ((1 1) (2 2) (3 4) (4 8) (5 14) (6 1))) |}]
+    part | example
+    1    | 13
+    2    | 30
+    ---------------
+    part | solution
+    1    | 22488
+    2    | 7013204
+    |}]
 ;;
 
 let solve () =
