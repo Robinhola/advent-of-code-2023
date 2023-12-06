@@ -258,21 +258,6 @@ let part1 data =
   |> Option.value_exn
 ;;
 
-(* let translate (ranges : range list) (seed_range : seed_range) : int = *)
-(*   List.fold_until *)
-(*     ranges *)
-(*     ~init:() *)
-(*     ~f:(fun _ range -> *)
-(*       let start = range.source in *)
-(*       let end_ = range.source + range.length in *)
-(*       match start <= number, number <= end_ with *)
-(*       | true, true -> *)
-(*         let offset = number - range.source in *)
-(*         Stop (range.destination + offset) *)
-(*       | _ -> Continue ()) *)
-(*     ~finish:(Fn.const number) *)
-(* ;; *)
-
 let how_to_reach_arrival (arrival : range) (ranges : range list) : range list =
   let ranges = Parse.sort_ranges_by_destination ranges in
   let target = arrival.source in
@@ -283,7 +268,6 @@ let how_to_reach_arrival (arrival : range) (ranges : range list) : range list =
     if start < end_
     then (
       let offset = start - range.destination.start in
-      (* print_s [%message (start : int) (end_ : int)]; *)
       let length = end_ - start in
       let source = to_range' (range.source.start + offset) length in
       let destination = to_range' start length in
@@ -292,18 +276,12 @@ let how_to_reach_arrival (arrival : range) (ranges : range list) : range list =
   |> Parse.sort_ranges_by_destination
 ;;
 
-(* let how_to_reach_arrival' (arrivals : range list) (ranges : range list) : range list = *)
-(*   let arrivals = Parse.sort_ranges_by_source arrivals in *)
-(*   List.map arrivals ~f:(fun arrival -> how_to_reach_arrival arrival ranges) |> List.concat *)
-(* ;; *)
-
 let rec depth_first_search (range : range) = function
   | [] -> Some range
   | next_step :: steps ->
     let how_to_reach =
       how_to_reach_arrival range next_step |> Parse.sort_ranges_by_destination
     in
-    (* print_s [%message (range : range) (how_to_reach : range list)]; *)
     List.fold_until
       how_to_reach
       ~init:None
@@ -311,8 +289,7 @@ let rec depth_first_search (range : range) = function
         match depth_first_search range steps with
         | Some result -> Continue_or_stop.Stop (Some result)
         | None -> Continue_or_stop.Continue None)
-      ~finish:(fun _ -> (* print_s [%message "None" (range : range)]; *)
-                        None)
+      ~finish:(Fn.const None)
 ;;
 
 let part2 data =
@@ -328,32 +305,6 @@ let part2 data =
     ]
   in
   let result = depth_first_search (List.hd_exn t.humidity_to_location) steps in
-  (* let result = *)
-  (*   t.humidity_to_location *)
-  (*   |> List.fold_until ~init:None ~finish:(Fn.const None) ~f:(fun _ range -> *)
-  (*     match depth_first_search range steps with *)
-  (*     | None -> Continue_or_stop.Continue None *)
-  (*     | Some result -> Continue_or_stop.Stop (Some result)) *)
-  (* in *)
-  (* let how_to_reach = *)
-  (*   how_to_reach_arrival' t.humidity_to_location t.temperature_to_humidity *)
-  (* in *)
-  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.light_to_temperature in *)
-  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.water_to_light in *)
-  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.fertilizer_to_water in *)
-  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.soil_to_fertilizer in *)
-  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.seed_to_soil in *)
-  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.seed_range in *)
-  (* let result = *)
-  (*   how_to_reach *)
-  (*   |> List.map ~f:(fun range -> List.range range.source (range.source + range.length)) *)
-  (*   |> List.concat *)
-  (*   |> Int.Set.of_list *)
-  (*   |> Set.to_list *)
-  (*   |> List.map ~f:(solve1' t) *)
-  (*   |> List.min_elt ~compare:Int.compare *)
-  (*   |> Option.value_exn *)
-  (* in *)
   let range = result |> Option.value_exn in
   solve1' t range.source.start
 ;;
