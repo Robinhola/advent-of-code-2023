@@ -37,16 +37,15 @@ humidity-to-location map:
 56 93 4|}
 ;;
 
-type range =
-  { source : int
-  ; destination : int
-  ; length : int
-  }
-[@@deriving sexp]
-
 type range' =
   { start : int
   ; end_ : int
+  }
+[@@deriving sexp]
+
+type range =
+  { source : range'
+  ; destination : range'
   }
 [@@deriving sexp]
 
@@ -67,7 +66,8 @@ type t =
 
 module Parse = struct
   let parse_range = function
-    | [ destination; source; length ] -> { source; destination; length }
+    | [ destination; source; length ] ->
+      { source = to_range' source length; destination = to_range' destination length }
     | _ -> failwith "Invalid range"
   ;;
 
@@ -90,39 +90,51 @@ module Parse = struct
   let rec parse_seed_range' (current : range List.t) = function
     | [] -> current
     | source :: length :: rest ->
-      parse_seed_range' ({ source; destination = source; length } :: current) rest
+      parse_seed_range'
+        ({ source = to_range' source length; destination = to_range' source length }
+         :: current)
+        rest
     | _ -> failwith "Bad seeds"
   ;;
 
   let sort_ranges_by_destination =
-    List.sort ~compare:(fun left right -> Int.compare left.destination right.destination)
+    List.sort ~compare:(fun left right ->
+      Int.compare left.destination.start right.destination.start)
   ;;
 
-  let sort_ranges_by_source =
-    List.sort ~compare:(fun left right -> Int.compare left.source right.source)
-  ;;
+  (* let sort_ranges_by_source = *)
+  (*   List.sort ~compare:(fun left right -> Int.compare left.source right.source) *)
+  (* ;; *)
 
   let make_continuous (ranges : range list) =
     let sorted_by_source =
-      List.sort ~compare:(fun left right -> Int.compare left.source right.source) ranges
+      ranges
+      |> List.sort ~compare:(fun left right ->
+        Int.compare left.source.start right.source.start)
     in
     let _, ranges =
       List.fold sorted_by_source ~init:(0, []) ~f:(fun (current_start, current) range ->
-        let new_start = range.source + range.length + 1 in
+        let new_start = range.source.end_ + 1 in
         let current =
           let current = range :: current in
-          match current_start >= range.source with
+          match current_start >= range.source.start with
           | true -> current
           | false ->
-            { source = current_start
-            ; destination = current_start
-            ; length = range.source - 1 - current_start
+            let length = range.source.start - 1 - current_start in
+            { source = to_range' current_start length
+            ; destination = to_range' current_start length
             }
             :: current
         in
         new_start, current)
     in
-    ranges
+    let latest_element =
+      List.fold ranges ~init:0 ~f:(fun acc { source; _ } -> max acc source.end_)
+    in
+    { source = to_range' latest_element 1000000
+    ; destination = to_range' latest_element 1000000
+    }
+    :: ranges
   ;;
 
   let parse_seed_range seeds = parse_seed_range' [] seeds
@@ -142,7 +154,7 @@ module Parse = struct
       let s = Fn.compose sort_ranges_by_destination make_continuous in
       let seeds = parse_seeds seeds in
       { seeds
-      ; seed_range = parse_seed_range seeds |> s
+      ; seed_range = parse_seed_range seeds
       ; seed_to_soil = parse_ranges (String.split_lines seed_to_soil) |> s
       ; soil_to_fertilizer = parse_ranges (String.split_lines soil_to_fertilizer) |> s
       ; fertilizer_to_water = parse_ranges (String.split_lines fertilizer_to_water) |> s
@@ -163,39 +175,51 @@ module Parse = struct
     (t
      ((seeds (79 14 55 13))
       (seed_range
-       (((source 0) (destination 0) (length 54))
-        ((source 55) (destination 55) (length 13))
-        ((source 69) (destination 69) (length 9))
-        ((source 79) (destination 79) (length 14))))
+       (((source ((start 55) (end_ 68))) (destination ((start 55) (end_ 68))))
+        ((source ((start 79) (end_ 93))) (destination ((start 79) (end_ 93))))))
       (seed_to_soil
-       (((source 0) (destination 0) (length 49))
-        ((source 98) (destination 50) (length 2))
-        ((source 50) (destination 52) (length 48))))
+       (((source ((start 0) (end_ 49))) (destination ((start 0) (end_ 49))))
+        ((source ((start 98) (end_ 100))) (destination ((start 50) (end_ 52))))
+        ((source ((start 50) (end_ 98))) (destination ((start 52) (end_ 100))))
+        ((source ((start 100) (end_ 1000100)))
+         (destination ((start 100) (end_ 1000100))))))
       (soil_to_fertilizer
-       (((source 15) (destination 0) (length 37))
-        ((source 52) (destination 37) (length 2))
-        ((source 0) (destination 39) (length 15))))
+       (((source ((start 15) (end_ 52))) (destination ((start 0) (end_ 37))))
+        ((source ((start 52) (end_ 54))) (destination ((start 37) (end_ 39))))
+        ((source ((start 0) (end_ 15))) (destination ((start 39) (end_ 54))))
+        ((source ((start 54) (end_ 1000054)))
+         (destination ((start 54) (end_ 1000054))))))
       (fertilizer_to_water
-       (((source 11) (destination 0) (length 42))
-        ((source 0) (destination 42) (length 7))
-        ((source 53) (destination 49) (length 8))
-        ((source 7) (destination 57) (length 4))))
+       (((source ((start 11) (end_ 53))) (destination ((start 0) (end_ 42))))
+        ((source ((start 0) (end_ 7))) (destination ((start 42) (end_ 49))))
+        ((source ((start 53) (end_ 61))) (destination ((start 49) (end_ 57))))
+        ((source ((start 7) (end_ 11))) (destination ((start 57) (end_ 61))))
+        ((source ((start 61) (end_ 1000061)))
+         (destination ((start 61) (end_ 1000061))))))
       (water_to_light
-       (((source 0) (destination 0) (length 17))
-        ((source 25) (destination 18) (length 70))
-        ((source 18) (destination 88) (length 7))))
+       (((source ((start 0) (end_ 17))) (destination ((start 0) (end_ 17))))
+        ((source ((start 25) (end_ 95))) (destination ((start 18) (end_ 88))))
+        ((source ((start 18) (end_ 25))) (destination ((start 88) (end_ 95))))
+        ((source ((start 95) (end_ 1000095)))
+         (destination ((start 95) (end_ 1000095))))))
       (light_to_temperature
-       (((source 0) (destination 0) (length 44))
-        ((source 77) (destination 45) (length 23))
-        ((source 64) (destination 68) (length 13))
-        ((source 45) (destination 81) (length 19))))
+       (((source ((start 0) (end_ 44))) (destination ((start 0) (end_ 44))))
+        ((source ((start 77) (end_ 100))) (destination ((start 45) (end_ 68))))
+        ((source ((start 64) (end_ 77))) (destination ((start 68) (end_ 81))))
+        ((source ((start 45) (end_ 64))) (destination ((start 81) (end_ 100))))
+        ((source ((start 100) (end_ 1000100)))
+         (destination ((start 100) (end_ 1000100))))))
       (temperature_to_humidity
-       (((source 69) (destination 0) (length 1))
-        ((source 0) (destination 1) (length 69))))
+       (((source ((start 69) (end_ 70))) (destination ((start 0) (end_ 1))))
+        ((source ((start 0) (end_ 69))) (destination ((start 1) (end_ 70))))
+        ((source ((start 70) (end_ 1000070)))
+         (destination ((start 70) (end_ 1000070))))))
       (humidity_to_location
-       (((source 0) (destination 0) (length 55))
-        ((source 93) (destination 56) (length 4))
-        ((source 56) (destination 60) (length 37)))))) |}]
+       (((source ((start 0) (end_ 55))) (destination ((start 0) (end_ 55))))
+        ((source ((start 93) (end_ 97))) (destination ((start 56) (end_ 60))))
+        ((source ((start 56) (end_ 93))) (destination ((start 60) (end_ 97))))
+        ((source ((start 97) (end_ 1000097)))
+         (destination ((start 97) (end_ 1000097)))))))) |}]
   ;;
 end
 
@@ -204,12 +228,12 @@ let translate (ranges : range list) number : int =
     ranges
     ~init:()
     ~f:(fun _ range ->
-      let start = range.source in
-      let end_ = range.source + range.length in
+      let start = range.source.start in
+      let end_ = range.source.end_ in
       match start <= number, number <= end_ with
       | true, true ->
-        let offset = number - range.source in
-        Stop (range.destination + offset)
+        let offset = number - range.source.start in
+        Stop (range.destination.start + offset)
       | _ -> Continue ())
     ~finish:(Fn.const number)
 ;;
@@ -251,85 +275,126 @@ let part1 data =
 
 let how_to_reach_arrival (arrival : range) (ranges : range list) : range list =
   let ranges = Parse.sort_ranges_by_destination ranges in
-  let target = to_range' arrival.source arrival.length in
+  let target = arrival.source in
   List.fold ~init:[] ranges ~f:(fun current range ->
-    let range' = to_range' range.destination range.length in
+    let range' = range.destination in
     let start = max target.start range'.start in
     let end_ = min target.end_ range'.end_ in
     if start < end_
     then (
-      let source = range.source in
-      let destination = start in
+      let offset = start - range.destination.start in
+      (* print_s [%message (start : int) (end_ : int)]; *)
       let length = end_ - start in
-      { source; destination; length } :: current)
+      let source = to_range' (range.source.start + offset) length in
+      let destination = to_range' start length in
+      { source; destination } :: current)
     else current)
   |> Parse.sort_ranges_by_destination
 ;;
 
-let how_to_reach_arrival' (arrivals : range list) (ranges : range list) : range list =
-  let arrivals = Parse.sort_ranges_by_source arrivals in
-  List.map arrivals ~f:(fun arrival -> how_to_reach_arrival arrival ranges) |> List.concat
+(* let how_to_reach_arrival' (arrivals : range list) (ranges : range list) : range list = *)
+(*   let arrivals = Parse.sort_ranges_by_source arrivals in *)
+(*   List.map arrivals ~f:(fun arrival -> how_to_reach_arrival arrival ranges) |> List.concat *)
+(* ;; *)
+
+let rec depth_first_search (range : range) = function
+  | [] -> Some range
+  | next_step :: steps ->
+    let how_to_reach =
+      how_to_reach_arrival range next_step |> Parse.sort_ranges_by_destination
+    in
+    (* print_s [%message (range : range) (how_to_reach : range list)]; *)
+    List.fold_until
+      how_to_reach
+      ~init:None
+      ~f:(fun _ range ->
+        match depth_first_search range steps with
+        | Some result -> Continue_or_stop.Stop (Some result)
+        | None -> Continue_or_stop.Continue None)
+      ~finish:(fun _ -> (* print_s [%message "None" (range : range)]; *)
+                        None)
+;;
+
+let part2 data =
+  let t = Parse.parse data in
+  let steps =
+    [ t.temperature_to_humidity
+    ; t.light_to_temperature
+    ; t.water_to_light
+    ; t.fertilizer_to_water
+    ; t.soil_to_fertilizer
+    ; t.seed_to_soil
+    ; t.seed_range
+    ]
+  in
+  let result = depth_first_search (List.hd_exn t.humidity_to_location) steps in
+  (* let result = *)
+  (*   t.humidity_to_location *)
+  (*   |> List.fold_until ~init:None ~finish:(Fn.const None) ~f:(fun _ range -> *)
+  (*     match depth_first_search range steps with *)
+  (*     | None -> Continue_or_stop.Continue None *)
+  (*     | Some result -> Continue_or_stop.Stop (Some result)) *)
+  (* in *)
+  (* let how_to_reach = *)
+  (*   how_to_reach_arrival' t.humidity_to_location t.temperature_to_humidity *)
+  (* in *)
+  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.light_to_temperature in *)
+  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.water_to_light in *)
+  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.fertilizer_to_water in *)
+  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.soil_to_fertilizer in *)
+  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.seed_to_soil in *)
+  (* let how_to_reach = how_to_reach_arrival' how_to_reach t.seed_range in *)
+  (* let result = *)
+  (*   how_to_reach *)
+  (*   |> List.map ~f:(fun range -> List.range range.source (range.source + range.length)) *)
+  (*   |> List.concat *)
+  (*   |> Int.Set.of_list *)
+  (*   |> Set.to_list *)
+  (*   |> List.map ~f:(solve1' t) *)
+  (*   |> List.min_elt ~compare:Int.compare *)
+  (*   |> Option.value_exn *)
+  (* in *)
+  let range = result |> Option.value_exn in
+  solve1' t range.source.start
 ;;
 
 let%expect_test _ =
   let t = Parse.parse example in
   let arrival = List.hd_exn t.humidity_to_location in
-  let how_to_reach = how_to_reach_arrival arrival t.temperature_to_humidity in
-  let how_to_reach = how_to_reach_arrival' how_to_reach t.light_to_temperature in
-  let how_to_reach = how_to_reach_arrival' how_to_reach t.water_to_light in
-  let how_to_reach = how_to_reach_arrival' how_to_reach t.fertilizer_to_water in
-  let how_to_reach = how_to_reach_arrival' how_to_reach t.soil_to_fertilizer in
-  let how_to_reach = how_to_reach_arrival' how_to_reach t.seed_to_soil in
-  let how_to_reach = how_to_reach_arrival' how_to_reach t.seed_range in
-  let result =
-    how_to_reach
-    |> List.map ~f:(fun range -> List.range range.source (range.source + range.length))
-    |> List.concat
-    |> Int.Set.of_list
-    |> Set.to_list
-    |> List.map ~f:(solve1' t)
-  in
-  print_s [%message (arrival : range) (how_to_reach : range list) (result : int list)];
+  let result = part2 example in
+  print_s
+    [%message
+      (t.seed_range : range list) (arrival : range) (result : int) (solve1' t 82 : int)];
   [%expect
     {|
-    ((arrival ((source 0) (destination 0) (length 55)))
-     (how_to_reach
-      (((source 0) (destination 0) (length 1))
-       ((source 0) (destination 0) (length 7))
-       ((source 0) (destination 0) (length 17))
-       ((source 0) (destination 0) (length 17))
-       ((source 0) (destination 0) (length 1))
-       ((source 0) (destination 0) (length 9))))
-     (result 22)) |}]
-;;
-
-let part2 data =
-  let t = Parse.parse data in
-  Parse.parse_seed_range t.seeds
+    ((t.seed_range
+      (((source ((start 55) (end_ 68))) (destination ((start 55) (end_ 68))))
+       ((source ((start 79) (end_ 93))) (destination ((start 79) (end_ 93))))))
+     (arrival
+      ((source ((start 0) (end_ 55))) (destination ((start 0) (end_ 55)))))
+     (result 46) ("solve1' t 82" 46)) |}]
 ;;
 
 let%expect_test _ =
   print_s [%message (part1 example : int)];
   print_s [%message (part1 Input.data : int)];
-  print_s [%message (part2 example : range list)];
+  print_s [%message (part2 example : int)];
   [%expect
     {|
     ("part1 example" 35)
     ("part1 Input.data" 313045984)
-    ("part2 example"
-     (((source 55) (destination 55) (length 13))
-      ((source 79) (destination 79) (length 14)))) |}]
+    ("part2 example" 46) |}]
 ;;
 
 let solve () =
   print_endline [%string "part | example"];
   print_endline [%string "1    | %{part1 example#Int}"];
-  (* print_endline [%string "2    | %{part2 example#Int}"]; *)
+  print_endline [%string "2    | %{part2 example#Int}"];
   print_endline [%string "---------------"];
   print_endline [%string "part | solution"];
-  print_endline [%string "1    | %{part1 Input.data#Int}"]
+  print_endline [%string "1    | %{part1 Input.data#Int}"];
+  print_endline [%string "2    | %{part2 Input.data#Int}"]
 ;;
-(* print_endline [%string "2    | %{part2 Input.data#Int}"] *)
 
 (* Part 2 ->
 
@@ -338,3 +403,17 @@ let solve () =
 
    0 -> N
 *)
+let%expect_test _ =
+  let t = Parse.parse example in
+  let range = { source = to_range' 45 2; destination = to_range' 45 2 } in
+  let how_to_reach =
+    how_to_reach_arrival range t.humidity_to_location |> Parse.sort_ranges_by_destination
+  in
+  print_s [%message (range : range) (how_to_reach : range list)];
+  [%expect
+    {|
+    ((range
+      ((source ((start 45) (end_ 47))) (destination ((start 45) (end_ 47)))))
+     (how_to_reach
+      (((source ((start 45) (end_ 47))) (destination ((start 45) (end_ 47))))))) |}]
+;;
